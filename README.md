@@ -1,6 +1,34 @@
 # claude-tools
 
-Developer tooling setup for Claude Code. Installs and configures all the recommended tools from the [claude.md-boilerplate](https://github.com/leighstillard/claude.md-boilerplate) template in one command.
+One command to set up all the developer tools that make Claude Code faster, smarter, and cheaper to run. Auto-detects your language, installs LSP servers, configures token-saving proxies, and sets up review plugins.
+
+```bash
+git clone https://github.com/leighstillard/claude-tools.git
+cd claude-tools
+./claude-tools setup
+```
+
+## FAQ
+
+**What does this install?**
+RTK (60-90% token savings on CLI output), LSP servers (semantic code understanding in ~50ms), and Claude Code plugins (superpowers, code-review, security-guidance). It also patches `~/.claude/settings.json` to enable LSP.
+
+**How does it know what to install?**
+It scans your project for `.py`, `.go`, `.ts` files and config files like `go.mod`, `pyproject.toml`, `package.json`. If nothing is found, it asks you.
+
+**Will it break my existing setup?**
+No. Every step checks before acting — if a tool is already installed, it updates it. If a setting is already configured, it skips it. Run `--dry-run` first if you want to see what would happen.
+
+**Does it need sudo?**
+No. Everything installs to user-level locations (cargo, npm global, go install, `~/.claude/`).
+
+**What's the relationship to claude.md-boilerplate?**
+[claude.md-boilerplate](https://github.com/leighstillard/claude.md-boilerplate) defines *what standards to follow*. This repo sets up *the tools that help you follow them*. You don't need the boilerplate to use claude-tools, but they work best together.
+
+**How do I know it worked?**
+After setup, start Claude Code and ask: "Verify my developer tools are working". Claude exercises each tool and presents a status table. This catches things like plugins that are installed but disabled.
+
+---
 
 ## What It Sets Up
 
@@ -11,17 +39,7 @@ Developer tooling setup for Claude Code. Installs and configures all the recomme
 | **Claude Code plugins** | superpowers (planning, TDD, code review), code-review, security-guidance | `claude plugin install` |
 | **Settings patching** | Enables `ENABLE_LSP_TOOL` in `~/.claude/settings.json` | jq |
 
-## Quick Start
-
-```bash
-git clone https://github.com/leighstillard/claude-tools.git
-cd claude-tools
-./claude-tools setup
-```
-
-The script auto-detects your project language from source files. If no code exists yet, it prompts you to choose.
-
-### Options
+## Options
 
 ```bash
 ./claude-tools setup --dry-run              # Preview what would be done
@@ -32,14 +50,6 @@ The script auto-detects your project language from source files. If no code exis
 ./claude-tools setup --skip-plugins         # Skip Claude Code plugin installation
 ```
 
-## Verify It Works
-
-After setup completes, start a Claude Code session and ask:
-
-> **"Verify my developer tools are working"**
-
-Claude will exercise each tool (RTK, LSP, plugins) and present a status table confirming everything is accessible from within its context. This catches issues like plugins that are installed but disabled, or LSP servers that aren't on PATH.
-
 ## Prerequisites
 
 - **jq** — required for settings patching
@@ -47,14 +57,6 @@ Claude will exercise each tool (RTK, LSP, plugins) and present a status table co
 - **claude** CLI — required for plugin installation
 - **cargo** — required for RTK (optional, skipped gracefully if missing)
 - **go** — required for gopls (optional, skipped gracefully if missing)
-
-## Relationship to claude.md-boilerplate
-
-This repo is a companion to [claude.md-boilerplate](https://github.com/leighstillard/claude.md-boilerplate), which provides an opinionated `CLAUDE.md` template for production-grade engineering standards (security, testing, observability, etc.).
-
-The boilerplate defines *what standards to follow*. This repo sets up *the tools that help you follow them* — token-efficient CLI output, semantic code navigation, and automated review workflows.
-
-You don't need the boilerplate to use claude-tools, but they work best together.
 
 ## License
 
