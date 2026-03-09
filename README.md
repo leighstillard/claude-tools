@@ -1,6 +1,6 @@
 # claude-tools
 
-One command to set up all the developer tools that make Claude Code faster, smarter, and cheaper to run. Auto-detects your language, installs LSP servers, configures token-saving proxies, and sets up review plugins.
+One command to set up all the developer tools that make Claude Code faster, smarter, and cheaper to run. Without these tools, Claude burns tokens reading files to find definitions, grepping across directories, and processing verbose CLI output. With them, RTK cuts 60-90% of tokens from command output, and LSP replaces multi-file grep searches with pinpoint lookups in ~50ms — meaning Claude spends tokens writing code, not searching for it.
 
 ```bash
 git clone https://github.com/leighstillard/claude-tools.git
@@ -11,7 +11,7 @@ cd claude-tools
 ## FAQ
 
 **What does this install?**
-RTK (60-90% token savings on CLI output), LSP servers (semantic code understanding in ~50ms), and Claude Code plugins (superpowers, code-review, security-guidance). It also patches `~/.claude/settings.json` to enable LSP.
+RTK (60-90% token savings by compressing verbose CLI output before it hits Claude's context), LSP servers (replaces expensive grep-and-read-file cycles with instant go-to-definition and find-references — one LSP call instead of reading 10 files to find where a function is defined), and Claude Code plugins (superpowers, code-review, security-guidance). It also patches `~/.claude/settings.json` to enable LSP.
 
 **How does it know what to install?**
 It scans your project for `.py`, `.go`, `.ts` files and config files like `go.mod`, `pyproject.toml`, `package.json`. If nothing is found, it asks you.
