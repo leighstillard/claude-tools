@@ -1,0 +1,508 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_VERSION="0.1.0"
+CLAUDE_DIR="${HOME}/.claude"
+SETTINGS_FILE="${CLAUDE_DIR}/settings.json"
+
+usage() {
+  cat <<EOF
+claude-tools v${SCRIPT_VERSION} — Developer tooling setup for Claude Code
+
+Usage: ./claude-tools setup [OPTIONS]
+
+Commands:
+  setup    Install and configure all recommended developer tools
+
+Options:
+  --lang <language>   Force language (python|go|typescript|all). Auto-detected if omitted.
+  --skip-rtk          Skip RTK installation
+  --skip-lsp          Skip LSP server installation
+  --skip-plugins      Skip Claude Code plugin installation
+  --dry-run           Show what would be done without doing it
+  -h, --help          Show this help
+
+
+After setup completes, start a Claude Code session and ask:
+  "Verify my developer tools are working"
+EOF
+}
+
+# --- Language Detection ---
+
+detect_languages() {
+  local langs=()
+
+  if compgen -G "*.py" >/dev/null 2>&1 || find . -name '*.py' -print -quit 2>/dev/null | grep -q . || [[ -f "pyproject.toml" ]] || [[ -f "requirements.txt" ]] || [[ -f "setup.py" ]]; then
+    langs+=("python")
+  fi
+
+  if compgen -G "*.go" >/dev/null 2>&1 || find . -name '*.go' -print -quit 2>/dev/null | grep -q . || [[ -f "go.mod" ]]; then
+    langs+=("go")
+  fi
+
+  if compgen -G "*.ts" >/dev/null 2>&1 || find . -name '*.ts' -print -quit 2>/dev/null | grep -q . || [[ -f "tsconfig.json" ]] || [[ -f "package.json" ]]; then
+    langs+=("typescript")
+  fi
+
+  if [[ ${#langs[@]} -eq 0 ]]; then
+    return
+  else
+    printf '%s\n' "${langs[@]}"
+  fi
+}
+
+prompt_language() {
+  if [[ ! -t 0 ]]; then
+    echo "ERROR: No languages detected and stdin is not interactive. Use --lang to specify." >&2
+    return 1
+  fi
+  echo "No source files detected. Which language(s) will this project use?"
+  echo ""
+  echo "  1) Python"
+  echo "  2) Go"
+  echo "  3) TypeScript / JavaScript"
+  echo "  4) All of the above"
+  echo ""
+  read -rp "Enter choice (1-4, or comma-separated e.g. 1,3): " choice
+
+  local langs=()
+  IFS=',' read -ra selections <<< "${choice}"
+  for sel in "${selections[@]}"; do
+    sel=$(echo "${sel}" | tr -d ' ')
+    case "${sel}" in
+      1) langs+=("python") ;;
+      2) langs+=("go") ;;
+      3) langs+=("typescript") ;;
+      4) langs=("python" "go" "typescript"); break ;;
+      *) echo "Invalid selection: ${sel}" >&2 ;;
+    esac
+  done
+
+  printf '%s\n' "${langs[@]}"
+}
+
+# --- RTK Installation ---
+
+install_rtk() {
+  local dry_run="${1:-false}"
+
+  echo ""
+  echo "=== RTK (Rust Token Killer) ==="
+
+  # Check if cargo is available
+  if ! command -v cargo &>/dev/null; then
+    echo "  SKIP: cargo not found. Install Rust first: https://rustup.rs"
+    echo "  Then re-run: ./claude-tools setup"
+    return 1
+  fi
+
+  # Check if rtk is installed
+  if command -v rtk &>/dev/null; then
+    local current_version
+    current_version=$(rtk --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    echo "  FOUND: rtk v${current_version}"
+
+    if [[ "${dry_run}" == "true" ]]; then
+      echo "  DRY-RUN: would run 'cargo install rust_token_killer' to update"
+    else
+      echo "  Updating..."
+      cargo install rust_token_killer 2>&1 | tail -1
+    fi
+  else
+    echo "  NOT FOUND: installing rtk..."
+    if [[ "${dry_run}" == "true" ]]; then
+      echo "  DRY-RUN: would run 'cargo install rust_token_killer'"
+    else
+      cargo install rust_token_killer
+    fi
+  fi
+
+  # Check if rtk is configured for Claude Code
+  if [[ "${dry_run}" == "true" ]]; then
+    echo "  DRY-RUN: would check hook status and run 'rtk init -g --auto-patch' if needed"
+  elif command -v rtk &>/dev/null; then
+    local rtk_status
+    rtk_status=$(rtk init --show 2>&1 || true)
+
+    if echo "${rtk_status}" | grep -q "Hook:.*rtk-rewrite.sh"; then
+      echo "  CONFIGURED: hook is set up"
+    else
+      echo "  CONFIGURING: running 'rtk init -g --auto-patch'..."
+      rtk init -g --auto-patch
+    fi
+  fi
+
+  echo "  DONE"
+}
+
+# --- LSP Server Installation ---
+
+install_lsp() {
+  local dry_run="${1:-false}"
+  shift
+  local langs=("$@")
+
+  echo ""
+  echo "=== LSP Servers ==="
+
+  for lang in "${langs[@]}"; do
+    case "${lang}" in
+      python)
+        echo "  [Python] pyright"
+        if command -v pyright &>/dev/null; then
+          local pyright_ver
+          pyright_ver=$(pyright --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "    FOUND: v${pyright_ver}"
+          if [[ "${dry_run}" == "true" ]]; then
+            echo "    DRY-RUN: would run 'npm install -g pyright@latest'"
+          else
+            echo "    Updating..."
+            npm install -g pyright@latest 2>&1 | tail -1
+          fi
+        else
+          if [[ "${dry_run}" == "true" ]]; then
+            echo "    DRY-RUN: would run 'npm install -g pyright'"
+          else
+            echo "    Installing..."
+            npm install -g pyright
+          fi
+        fi
+        ;;
+      go)
+        echo "  [Go] gopls"
+        if command -v gopls &>/dev/null; then
+          local gopls_ver
+          gopls_ver=$(gopls version 2>/dev/null | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "    FOUND: ${gopls_ver}"
+          if [[ "${dry_run}" == "true" ]]; then
+            echo "    DRY-RUN: would run 'go install golang.org/x/tools/gopls@latest'"
+          else
+            echo "    Updating..."
+            go install golang.org/x/tools/gopls@latest
+          fi
+        else
+          if ! command -v go &>/dev/null; then
+            echo "    SKIP: go not found. Install Go first."
+          elif [[ "${dry_run}" == "true" ]]; then
+            echo "    DRY-RUN: would run 'go install golang.org/x/tools/gopls@latest'"
+          else
+            echo "    Installing..."
+            go install golang.org/x/tools/gopls@latest
+          fi
+        fi
+        ;;
+      typescript)
+        echo "  [TypeScript] typescript-language-server"
+        if command -v typescript-language-server &>/dev/null; then
+          echo "    FOUND"
+          if [[ "${dry_run}" == "true" ]]; then
+            echo "    DRY-RUN: would run 'npm install -g typescript-language-server@latest typescript@latest'"
+          else
+            echo "    Updating..."
+            npm install -g typescript-language-server@latest typescript@latest 2>&1 | tail -1
+          fi
+        else
+          if [[ "${dry_run}" == "true" ]]; then
+            echo "    DRY-RUN: would run 'npm install -g typescript-language-server typescript'"
+          else
+            echo "    Installing..."
+            npm install -g typescript-language-server typescript
+          fi
+        fi
+        ;;
+    esac
+  done
+
+  echo "  DONE"
+}
+
+# --- Settings Patching ---
+
+patch_settings() {
+  local dry_run="${1:-false}"
+
+  echo ""
+  echo "=== Claude Code Settings ==="
+
+  if ! command -v jq &>/dev/null; then
+    echo "  ERROR: jq is required for settings patching. Install jq first."
+    return 1
+  fi
+
+  mkdir -p "${CLAUDE_DIR}"
+
+  if [[ ! -f "${SETTINGS_FILE}" ]]; then
+    echo "  Creating ${SETTINGS_FILE}..."
+    if [[ "${dry_run}" == "true" ]]; then
+      echo "  DRY-RUN: would create settings.json with ENABLE_LSP_TOOL=1"
+      echo "  DONE"
+      return
+    else
+      echo '{}' > "${SETTINGS_FILE}"
+    fi
+  fi
+
+  # Check if ENABLE_LSP_TOOL is already set
+  local current_lsp
+  current_lsp=$(jq -r '.env.ENABLE_LSP_TOOL // empty' "${SETTINGS_FILE}" 2>/dev/null)
+
+  if [[ "${current_lsp}" == "1" ]]; then
+    echo "  ENABLE_LSP_TOOL: already enabled"
+  else
+    echo "  ENABLE_LSP_TOOL: enabling..."
+    if [[ "${dry_run}" == "true" ]]; then
+      echo "  DRY-RUN: would set env.ENABLE_LSP_TOOL=1 in settings.json"
+    else
+      local tmp
+      tmp=$(mktemp)
+      jq '.env = (.env // {}) + {"ENABLE_LSP_TOOL": "1"}' "${SETTINGS_FILE}" > "${tmp}" && mv "${tmp}" "${SETTINGS_FILE}"
+    fi
+  fi
+
+  echo "  DONE"
+}
+
+# --- Plugin Installation ---
+
+install_plugin() {
+  local plugin_name="${1}"
+  local dry_run="${2:-false}"
+  local short_name="${plugin_name%%@*}"
+
+  # Check if already installed
+  local installed
+  installed=$(jq -r ".plugins.\"${plugin_name}\" // empty" "${CLAUDE_DIR}/plugins/installed_plugins.json" 2>/dev/null)
+
+  if [[ -n "${installed}" ]]; then
+    echo "  FOUND: ${short_name}"
+  else
+    echo "  INSTALLING: ${short_name}..."
+    if [[ "${dry_run}" == "true" ]]; then
+      echo "    DRY-RUN: would run 'claude plugin install ${plugin_name}'"
+    else
+      claude plugin install "${plugin_name}" 2>&1 | sed 's/^/    /'
+    fi
+  fi
+}
+
+install_plugins() {
+  local dry_run="${1:-false}"
+  shift
+  local langs=("$@")
+
+  echo ""
+  echo "=== Claude Code Plugins ==="
+
+  if ! command -v claude &>/dev/null; then
+    echo "  ERROR: 'claude' CLI not found. Install Claude Code first."
+    return 1
+  fi
+
+  # Ensure official marketplace is registered
+  local known_marketplaces
+  known_marketplaces=$(cat "${CLAUDE_DIR}/plugins/known_marketplaces.json" 2>/dev/null || echo "{}")
+
+  if ! echo "${known_marketplaces}" | jq -e '."claude-plugins-official"' &>/dev/null; then
+    echo "  Adding official plugin marketplace..."
+    if [[ "${dry_run}" != "true" ]]; then
+      claude plugin marketplace add anthropics/claude-plugins-official 2>&1 || true
+    fi
+  fi
+
+  # Ensure superpowers marketplace is registered
+  if ! echo "${known_marketplaces}" | jq -e '."superpowers-extended-cc-marketplace"' &>/dev/null; then
+    echo "  Adding superpowers marketplace..."
+    if [[ "${dry_run}" != "true" ]]; then
+      claude plugin marketplace add pcvelz/superpowers 2>&1 || true
+    fi
+  fi
+
+  # LSP plugins based on detected languages
+  for lang in "${langs[@]}"; do
+    case "${lang}" in
+      python)
+        install_plugin "pyright-lsp@claude-plugins-official" "${dry_run}"
+        ;;
+      go)
+        install_plugin "gopls-lsp@claude-plugins-official" "${dry_run}"
+        ;;
+      typescript)
+        install_plugin "typescript-lsp@claude-plugins-official" "${dry_run}"
+        ;;
+    esac
+  done
+
+  # Workflow plugins (always install)
+  install_plugin "superpowers-extended-cc@superpowers-extended-cc-marketplace" "${dry_run}"
+  install_plugin "code-review@claude-plugins-official" "${dry_run}"
+  install_plugin "security-guidance@claude-plugins-official" "${dry_run}"
+
+  echo "  DONE"
+}
+
+# --- Orchestration ---
+
+cmd_setup() {
+  local dry_run="false"
+  local forced_lang=""
+  local skip_rtk="false"
+  local skip_lsp="false"
+  local skip_plugins="false"
+
+  while [[ $# -gt 0 ]]; do
+    case "${1}" in
+      --lang)
+        if [[ $# -lt 2 ]]; then
+          echo "ERROR: --lang requires an argument (python|go|typescript|all)" >&2
+          exit 1
+        fi
+        forced_lang="${2}"; shift 2 ;;
+      --skip-rtk) skip_rtk="true"; shift ;;
+      --skip-lsp) skip_lsp="true"; shift ;;
+      --skip-plugins) skip_plugins="true"; shift ;;
+      --dry-run) dry_run="true"; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) echo "Unknown option: ${1}" >&2; exit 1 ;;
+    esac
+  done
+
+  echo "claude-tools v${SCRIPT_VERSION} — setup"
+  echo ""
+
+  # Determine languages
+  local langs=()
+  if [[ -n "${forced_lang}" ]]; then
+    if [[ "${forced_lang}" == "all" ]]; then
+      langs=("python" "go" "typescript")
+    else
+      IFS=',' read -ra langs <<< "${forced_lang}"
+    fi
+    # Validate language values
+    for lang in "${langs[@]}"; do
+      case "${lang}" in
+        python|go|typescript) ;;
+        *) echo "ERROR: Unknown language '${lang}'. Valid values: python, go, typescript, all" >&2; exit 1 ;;
+      esac
+    done
+    echo "Languages (forced): ${langs[*]}"
+  else
+    langs=()
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && langs+=("$line")
+    done < <(detect_languages)
+    if [[ ${#langs[@]} -eq 0 ]] || [[ -z "${langs[0]:-}" ]]; then
+      langs=()
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && langs+=("$line")
+      done < <(prompt_language)
+    fi
+    echo "Languages (detected): ${langs[*]}"
+  fi
+
+  if [[ ${#langs[@]} -eq 0 ]] || [[ -z "${langs[0]}" ]]; then
+    echo "ERROR: No languages selected. Use --lang to specify." >&2
+    exit 1
+  fi
+
+  # Check prerequisites
+  echo ""
+  echo "=== Prerequisites ==="
+  local prereqs_ok="true"
+
+  if ! command -v jq &>/dev/null; then
+    echo "  MISSING: jq (required for settings patching)"
+    prereqs_ok="false"
+  else
+    echo "  OK: jq"
+  fi
+
+  # npm is only needed for python (pyright) and typescript LSP servers
+  local needs_npm="false"
+  for lang in "${langs[@]}"; do
+    if [[ "${lang}" == "python" ]] || [[ "${lang}" == "typescript" ]]; then
+      needs_npm="true"
+      break
+    fi
+  done
+  if [[ "${needs_npm}" == "true" ]]; then
+    if ! command -v npm &>/dev/null; then
+      echo "  MISSING: npm (required for LSP servers)"
+      prereqs_ok="false"
+    else
+      echo "  OK: npm"
+    fi
+  fi
+
+  if ! command -v claude &>/dev/null; then
+    echo "  MISSING: claude CLI (required for plugin installation)"
+    prereqs_ok="false"
+  else
+    echo "  OK: claude"
+  fi
+
+  if [[ "${prereqs_ok}" == "false" ]]; then
+    echo ""
+    echo "Install missing prerequisites and re-run."
+    exit 1
+  fi
+
+  # Run installation steps
+  local setup_failed="false"
+
+  if [[ "${skip_rtk}" != "true" ]]; then
+    install_rtk "${dry_run}" || setup_failed="true"
+  fi
+
+  if [[ "${skip_lsp}" != "true" ]]; then
+    install_lsp "${dry_run}" "${langs[@]}" || setup_failed="true"
+  fi
+
+  patch_settings "${dry_run}" || setup_failed="true"
+
+  if [[ "${skip_plugins}" != "true" ]]; then
+    install_plugins "${dry_run}" "${langs[@]}" || setup_failed="true"
+  fi
+
+  # Final summary
+  echo ""
+  if [[ "${setup_failed}" == "true" ]]; then
+    echo "========================================"
+    echo "  Setup completed with warnings!"
+    echo "  Some components failed to install."
+    echo "  Review the output above for details."
+    echo "========================================"
+  else
+    echo "========================================"
+    echo "  Setup complete!"
+    echo "========================================"
+  fi
+  echo ""
+  echo "Next step: start a Claude Code session and ask:"
+  echo ""
+  echo '  "Verify my developer tools are working"'
+  echo ""
+  echo "Claude will exercise each tool (RTK, LSP, plugins)"
+  echo "and confirm they are accessible from within its context."
+  echo ""
+}
+
+# --- Main ---
+
+main() {
+  if [[ $# -eq 0 ]]; then
+    usage
+    exit 0
+  fi
+
+  local cmd="${1}"
+  shift
+
+  case "${cmd}" in
+    setup) cmd_setup "$@" ;;
+    -h|--help) usage ;;
+    *) echo "Unknown command: ${cmd}. Run './claude-tools --help' for usage." >&2; exit 1 ;;
+  esac
+}
+
+main "$@"
