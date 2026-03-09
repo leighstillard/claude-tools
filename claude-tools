@@ -392,10 +392,7 @@ offer_boilerplate() {
           cp "${tmp_dir}"/docs/standards/*.md docs/standards/
           rm -rf "${tmp_dir}"
           echo "  INSTALLED: CLAUDE.md + docs/standards/"
-          echo ""
-          echo "  Tailor it to your project by running this in Claude Code:"
-          echo '  "Review CLAUDE.md and docs/standards/. Remove anything irrelevant'
-          echo '   to [describe your project]. Update anything outdated."'
+          BOILERPLATE_INSTALLED="true"
         else
           rm -rf "${tmp_dir}"
           echo "  ERROR: Failed to clone boilerplate. Install manually from:"
@@ -519,6 +516,7 @@ cmd_setup() {
 
   # Run installation steps
   local setup_failed="false"
+  BOILERPLATE_INSTALLED="false"
 
   if [[ "${skip_rtk}" != "true" ]]; then
     install_rtk "${dry_run}" || setup_failed="true"
@@ -553,12 +551,24 @@ cmd_setup() {
     echo "========================================"
   fi
   echo ""
-  echo "Next step: start a Claude Code session and ask:"
-  echo ""
-  echo '  "Verify my developer tools are working"'
-  echo ""
-  echo "Claude will exercise each tool (RTK, LSP, plugins)"
-  echo "and confirm they are accessible from within its context."
+  if [[ "${BOILERPLATE_INSTALLED}" == "true" ]]; then
+    echo "Start a Claude Code session and run this prompt to tailor the"
+    echo "standards to your project, then verify your tools:"
+    echo ""
+    echo '  Review CLAUDE.md and all files in docs/standards/. For each pillar file:'
+    echo '  1. Assess whether this pillar is relevant to our project: [describe your'
+    echo '     project]. Remove any that are not relevant and update CLAUDE.md.'
+    echo '  2. Review the compliance references (GDPR, PCI-DSS, APRA, SOX, etc.) and'
+    echo '     remove any that do not apply to our use case.'
+    echo '  3. Check all technical recommendations against current best practices.'
+    echo '     Flag anything outdated, deprecated, or superseded. Update as needed.'
+    echo '  4. Summarise what you changed and why.'
+    echo '  5. Then verify my developer tools are working.'
+  else
+    echo "Next step: start a Claude Code session and ask:"
+    echo ""
+    echo '  "Verify my developer tools are working"'
+  fi
   echo ""
 }
 
