@@ -23,7 +23,7 @@ No. Every step checks before acting — if a tool is already installed, it updat
 No. Everything installs to user-level locations (cargo, npm global, go install, `~/.claude/`).
 
 **What's the relationship to claude.md-boilerplate?**
-[claude.md-boilerplate](https://github.com/leighstillard/claude.md-boilerplate) defines *what standards to follow*. This repo sets up *the tools that help you follow them*. You don't need the boilerplate to use claude-tools, but they work best together.
+[claude.md-boilerplate](https://github.com/leighstillard/claude.md-boilerplate) defines *what standards to follow*. This repo sets up *the tools that help you follow them*. During setup, you'll be offered the option to install the boilerplate's engineering standards (CLAUDE.md + pillar files) into your project. If you accept, the script gives you a tailoring prompt to run in Claude Code so you can strip out anything that doesn't apply.
 
 **How do I know it worked?**
 After setup, start Claude Code and ask: "Verify my developer tools are working". Claude exercises each tool and presents a status table. This catches things like plugins that are installed but disabled.
@@ -48,6 +48,7 @@ After setup, start Claude Code and ask: "Verify my developer tools are working".
 ./claude-tools setup --skip-rtk             # Skip RTK installation
 ./claude-tools setup --skip-lsp             # Skip LSP server installation
 ./claude-tools setup --skip-plugins         # Skip Claude Code plugin installation
+./claude-tools setup --skip-boilerplate     # Skip the engineering standards offer
 ```
 
 ## Prerequisites
