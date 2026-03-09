@@ -19,6 +19,7 @@ Options:
   --skip-rtk          Skip RTK installation
   --skip-lsp          Skip LSP server installation
   --skip-plugins      Skip Claude Code plugin installation
+  --skip-boilerplate  Skip the engineering standards (claude.md-boilerplate) offer
   --dry-run           Show what would be done without doing it
   -h, --help          Show this help
 
@@ -341,6 +342,73 @@ install_plugins() {
   echo "  DONE"
 }
 
+# --- Boilerplate Offer ---
+
+BOILERPLATE_REPO="https://github.com/leighstillard/claude.md-boilerplate"
+
+offer_boilerplate() {
+  local dry_run="${1:-false}"
+
+  echo ""
+  echo "=== Engineering Standards (claude.md-boilerplate) ==="
+  echo ""
+
+  # Check if CLAUDE.md already exists in the current project
+  if [[ -f "CLAUDE.md" ]]; then
+    echo "  CLAUDE.md already exists in this project. Skipping."
+    return
+  fi
+
+  # Non-interactive — skip
+  if [[ ! -t 0 ]]; then
+    echo "  Non-interactive session. Skipping boilerplate offer."
+    echo "  Learn more: ${BOILERPLATE_REPO}"
+    return
+  fi
+
+  echo "  claude.md-boilerplate is a companion template that gives Claude Code"
+  echo "  persistent engineering standards — security rules, tenant isolation,"
+  echo "  structured logging, test coverage requirements, and MCP safety guardrails."
+  echo ""
+  echo "  It adds a CLAUDE.md file (~75 lines, always loaded) and detailed pillar"
+  echo "  files that Claude reads on demand. Without it, Claude can write working"
+  echo "  code that skips the non-functional requirements that matter in production."
+  echo ""
+  echo "  Learn more: ${BOILERPLATE_REPO}"
+  echo ""
+  read -rp "  Install engineering standards into this project? (y/N): " answer
+
+  case "${answer}" in
+    [yY]|[yY][eE][sS])
+      if [[ "${dry_run}" == "true" ]]; then
+        echo "  DRY-RUN: would clone boilerplate and copy CLAUDE.md + docs/standards/"
+      else
+        echo "  Cloning boilerplate..."
+        local tmp_dir
+        tmp_dir=$(mktemp -d)
+        if git clone --depth 1 --quiet "${BOILERPLATE_REPO}.git" "${tmp_dir}" 2>/dev/null; then
+          cp "${tmp_dir}/CLAUDE.md" .
+          mkdir -p docs/standards
+          cp "${tmp_dir}"/docs/standards/*.md docs/standards/
+          rm -rf "${tmp_dir}"
+          echo "  INSTALLED: CLAUDE.md + docs/standards/"
+          echo ""
+          echo "  Tailor it to your project by running this in Claude Code:"
+          echo '  "Review CLAUDE.md and docs/standards/. Remove anything irrelevant'
+          echo '   to [describe your project]. Update anything outdated."'
+        else
+          rm -rf "${tmp_dir}"
+          echo "  ERROR: Failed to clone boilerplate. Install manually from:"
+          echo "  ${BOILERPLATE_REPO}"
+        fi
+      fi
+      ;;
+    *)
+      echo "  Skipped. You can install it later from: ${BOILERPLATE_REPO}"
+      ;;
+  esac
+}
+
 # --- Orchestration ---
 
 cmd_setup() {
@@ -349,6 +417,7 @@ cmd_setup() {
   local skip_rtk="false"
   local skip_lsp="false"
   local skip_plugins="false"
+  local skip_boilerplate="false"
 
   while [[ $# -gt 0 ]]; do
     case "${1}" in
@@ -361,6 +430,7 @@ cmd_setup() {
       --skip-rtk) skip_rtk="true"; shift ;;
       --skip-lsp) skip_lsp="true"; shift ;;
       --skip-plugins) skip_plugins="true"; shift ;;
+      --skip-boilerplate) skip_boilerplate="true"; shift ;;
       --dry-run) dry_run="true"; shift ;;
       -h|--help) usage; exit 0 ;;
       *) echo "Unknown option: ${1}" >&2; exit 1 ;;
@@ -462,6 +532,11 @@ cmd_setup() {
 
   if [[ "${skip_plugins}" != "true" ]]; then
     install_plugins "${dry_run}" "${langs[@]}" || setup_failed="true"
+  fi
+
+  # Offer boilerplate setup
+  if [[ "${skip_boilerplate}" != "true" ]]; then
+    offer_boilerplate "${dry_run}"
   fi
 
   # Final summary
