@@ -34,10 +34,21 @@ After setup, start Claude Code and ask: "Verify my developer tools are working".
 
 | Tool | What It Does | Install Method |
 |---|---|---|
-| **RTK** (Rust Token Killer) | CLI proxy that compresses tool output, saving 60-90% of tokens | `cargo install rust_token_killer` |
+| **RTK** (Rust Token Killer) | CLI proxy that compresses tool output, saving 60-90% of tokens | `curl -fsSL .../rtk/install.sh \| sh` |
 | **LSP servers** | Semantic code understanding — go-to-definition, find-references, type info in ~50ms | pyright (npm), gopls (go install), typescript-language-server (npm) |
 | **Claude Code plugins** | superpowers (planning, TDD, code review), code-review, security-guidance | `claude plugin install` |
 | **Settings patching** | Enables `ENABLE_LSP_TOOL` in `~/.claude/settings.json` | jq |
+
+## Installing Into Another Project
+
+RTK, LSP servers, plugins, and settings are global — they only need to be installed once. To add the engineering standards (CLAUDE.md + pillar files) to a different project, run setup from that project's directory:
+
+```bash
+cd /path/to/your-project
+~/claude-tools/claude-tools setup --skip-rtk --skip-lsp --skip-plugins
+```
+
+This skips the global tools (already installed) and just offers to install the boilerplate into the current directory.
 
 ## Options
 
@@ -56,7 +67,7 @@ After setup, start Claude Code and ask: "Verify my developer tools are working".
 - **jq** — required for settings patching
 - **npm** — required for Python and TypeScript LSP servers
 - **claude** CLI — required for plugin installation
-- **cargo** — required for RTK (optional, skipped gracefully if missing)
+- **curl** — required for RTK install (optional, skipped gracefully if missing)
 - **go** — required for gopls (optional, skipped gracefully if missing)
 
 ## License
